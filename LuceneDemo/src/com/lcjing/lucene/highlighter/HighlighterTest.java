@@ -1,0 +1,72 @@
+package com.lcjing.lucene.highlighter;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.queryparser.classic.ParseException;
+import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.highlight.Fragmenter;
+import org.apache.lucene.search.highlight.Highlighter;
+import org.apache.lucene.search.highlight.InvalidTokenOffsetsException;
+import org.apache.lucene.search.highlight.QueryScorer;
+import org.apache.lucene.search.highlight.SimpleHTMLFormatter;
+import org.apache.lucene.search.highlight.SimpleSpanFragmenter;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.FSDirectory;
+
+import com.lcjing.lucene.ik.IKAnalyzer6x;
+
+/**
+ * Lucene 查询高亮
+ *
+ * @author lcjing
+ * @date 2020/12/4
+ */
+public class HighlighterTest {
+    public static void main(String[] args) throws IOException, InvalidTokenOffsetsException, ParseException {
+        String field = "title";
+        Path indexPath = Paths.get("indexdir");
+        Directory dir = FSDirectory.open(indexPath);
+        IndexReader reader = DirectoryReader.open(dir);
+        IndexSearcher searcher = new IndexSearcher(reader);
+        Analyzer analyzer = new IKAnalyzer6x();
+        QueryParser parser = new QueryParser(field, analyzer);
+        Query query = parser.parse("北大");
+        System.out.println("Query:" + query);
+
+        // 查询高亮
+        QueryScorer score = new QueryScorer(query, field);
+        // 定制高亮标签
+        SimpleHTMLFormatter fors = new SimpleHTMLFormatter("<span style=\"color:red;\">", "</span>");
+        // 高亮分析器
+        Highlighter highlighter = new Highlighter(fors, score);
+
+        // 返回前10条
+        TopDocs tds = searcher.search(query, 10);
+        for (ScoreDoc sd : tds.scoreDocs) {
+            Document doc = searcher.doc(sd.doc);
+            System.out.println("id:" + doc.get("id"));
+            System.out.println("title:" + doc.get("title"));
+            // 获取tokenStream
+            TokenStream tokenStream = analyzer.tokenStream(field, new StringReader(doc.get("title")));
+            Fragmenter fragment = new SimpleSpanFragmenter(score);
+            highlighter.setTextFragmenter(fragment);
+            // 获取高亮的片段
+            String str = highlighter.getBestFragment(tokenStream, doc.get(field));
+            System.out.println("高亮的片段:" + str);
+        }
+        dir.close();
+        reader.close();
+    }
+}
